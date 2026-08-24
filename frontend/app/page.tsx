@@ -45,7 +45,7 @@ interface HeroData {
 export default function WalletQuestApp() {
   const [activeTab, setActiveTab] = useState<'hub' | 'forge' | 'arena' | 'architecture'>('forge');
   const [isCallingRpc, setIsCallingRpc] = useState(false);
-  const [inputWallet, setInputWallet] = useState('0x71546f55c131acd54cf93e181b9cabaeaf440fc3');
+  const [inputWallet, setInputWallet] = useState('0x5C48c6f77617FC05761433Cc4019A79b47d1ec7D');
   const [selectedArchetype, setSelectedArchetype] = useState<'degen' | 'whale' | 'nft'>('degen');
   const [rpcLogs, setRpcLogs] = useState<string[]>([]);
   const [duelResult, setDuelResult] = useState<string | null>(null);
@@ -55,12 +55,12 @@ export default function WalletQuestApp() {
 
   const demoPresets = {
     degen: {
-      address: '0x71546f55c131acd54cf93e181b9cabaeaf440fc3',
+      address: '0x5C48c6f77617FC05761433Cc4019A79b47d1ec7D',
       url: 'https://theshahali.github.io/wallet-quest/demo/mock_wallet_degen.html',
       label: 'Degen Trader (DEX Berserker)'
     },
     whale: {
-      address: '0x5c48c6f77617fc05761433cc4019a79b47d1ec7d',
+      address: '0x71546f55c131acd54cf93e181b9cabaeaf440fc3',
       url: 'https://theshahali.github.io/wallet-quest/demo/mock_wallet_whale.html',
       label: 'Compound Whale (DeFi Archmage)'
     },

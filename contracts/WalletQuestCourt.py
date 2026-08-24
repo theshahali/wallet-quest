@@ -77,8 +77,8 @@ class WalletQuestCourt(gl.Contract):
         self.authorized_sources["https://theshahali.github.io/wallet-quest/demo/mock_wallet_nft_collector.html"] = True
 
         # Pre-seed Archetype Genesis Hero for testing (Whale Archmage)
-        self.heroes["0x5c48c6f77617fc05761433cc4019a79b47d1ec7d"] = HeroProfile(
-            wallet_address="0x5c48c6f77617fc05761433cc4019a79b47d1ec7d",
+        self.heroes["0x71546f55c131acd54cf93e181b9cabaeaf440fc3"] = HeroProfile(
+            wallet_address="0x71546f55c131acd54cf93e181b9cabaeaf440fc3",
             hero_name="Aurelius",
             hero_title="Archmage of the Compound Citadel",
             hero_class="DEFI_ARCHMAGE",
