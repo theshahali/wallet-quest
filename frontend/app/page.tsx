@@ -334,7 +334,7 @@ export default function WalletQuestApp() {
               >
                 <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <div className="text-left font-mono text-xs">
-                  <div className="text-white font-bold">{isGuestMode ? 'Guest Mode' : '0x5C48...b921'}</div>
+                  <div className="text-white font-bold">{isGuestMode ? 'Guest Mode' : '0x5C48...ec7D'}</div>
                 </div>
               </div>
             ) : (
@@ -853,7 +853,7 @@ export default function WalletQuestApp() {
                 onClick={() => {
                   setIsGuestMode(false);
                   setShowWalletModal(false);
-                  addLog('Switched to primary connected account (0x5C48...b921)');
+                  addLog('Switched to primary connected account (0x5C48...ec7D)');
                 }}
                 className="w-full p-3 rounded-xl bg-purple-950/60 border border-purple-600/50 hover:border-purple-400 text-left transition-all"
               >
