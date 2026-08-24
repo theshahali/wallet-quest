@@ -20,7 +20,7 @@ import {
   BookOpen
 } from 'lucide-react';
 
-const CONTRACT_ADDRESS = '0x0000000000000000000000000000000000000000';
+const CONTRACT_ADDRESS = '0x037A962c2be3781Fb31a5faF3fb22D6CBb555049';
 const GENLAYER_RPC = 'https://studio.genlayer.com/api';
 
 interface HeroData {

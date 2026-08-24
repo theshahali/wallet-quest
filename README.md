@@ -4,6 +4,13 @@
 
 ---
 
+## 🔗 Verified Deployments & Links
+- **GenLayer Explorer Contract**: [`0x037A962c2be3781Fb31a5faF3fb22D6CBb555049`](https://explorer-studio.genlayer.com/address/0x037A962c2be3781Fb31a5faF3fb22D6CBb555049)
+- **GitHub Repository**: [`https://github.com/theshahali/wallet-quest`](https://github.com/theshahali/wallet-quest)
+- **Live DApp Dashboard**: [`https://wallet-quest.vercel.app/`](https://wallet-quest.vercel.app/)
+
+---
+
 ## ❖ PROTOCOL OVERVIEW
 WalletQuest transforms static blockchain transaction histories into living, verifiable RPG champions. Using GenLayer's natural language perception and AI consensus, the protocol audits lifetime transaction graphs, protocol diversity, and liquidation scars to assign balanced stats, discrete classes, and customized lore.
 
@@ -11,10 +18,10 @@ WalletQuest transforms static blockchain transaction histories into living, veri
 
 ## ❖ ARCHITECTURAL INVARIANTS & STEWARD COMPLIANCE
 1. **Multi-Layer Anti-Replay Uniqueness**:
-   - **Unique Summon ID**: Prevents re-executing summon attempts (`[ERR_REPLAY_01]`).
-   - **One-Hero-Per-Wallet Binding**: Enforces strict uniqueness so a wallet address cannot forge duplicate characters (`[ERR_REPLAY_02]`).
+   - **Unique Summon ID**: Prevents duplicate summon attempts (`[ERR_REPLAY_01]`).
+   - **One-Hero-Per-Wallet Binding**: Enforces strict uniqueness so a wallet address cannot forge duplicate characters (`[ERR_REPLAY_02]`). Verified on-chain via live revert.
 2. **Anti-Self-Matching PvP Arena Guard**:
-   - In Arena duels, the contract asserts `challenger != defender`, blocking self-challenging exploits. Both duelists must be verified summoned heroes.
+   - In Arena duels, the contract asserts `challenger != defender`, blocking self-challenging exploits (`[ERR_SELF_DUEL]`). Both duelists must be verified summoned heroes.
 3. **Deterministic Attribute Mathematical Calibration**:
    - Level, HP, Mana, Attack, Defense, and Critical Hit rates are calculated from actual verified on-chain metrics (transaction count, volume, liquidation scars), ensuring 100% fair gameplay balance.
 4. **Single-Round Unified AI Consensus**:
