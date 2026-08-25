@@ -8,31 +8,37 @@
 - **GenLayer Explorer Contract**: [`0x037A962c2be3781Fb31a5faF3fb22D6CBb555049`](https://explorer-studio.genlayer.com/address/0x037A962c2be3781Fb31a5faF3fb22D6CBb555049)
 - **GitHub Repository**: [`https://github.com/theshahali/wallet-quest`](https://github.com/theshahali/wallet-quest)
 - **Live DApp Dashboard**: [`https://wallet-quest.vercel.app/`](https://wallet-quest.vercel.app/)
+- **Target Evidence Snapshot**: [`https://theshahali.github.io/wallet-quest/demo/mock_wallet_degen.html`](https://theshahali.github.io/wallet-quest/demo/mock_wallet_degen.html)
 
 ---
 
-## ❖ PROTOCOL OVERVIEW
-WalletQuest transforms static blockchain transaction histories into living, verifiable RPG champions. Using GenLayer's natural language perception and AI consensus, the protocol audits lifetime transaction graphs, protocol diversity, and liquidation scars to assign balanced stats, discrete classes, and customized lore.
+## 🛡️ Complete Collateral Path & Pre-Settlement Verification (Pavel Kolosov Hardening)
 
----
+### 1. Documented Duel-ID Mapping
+Standardized 1-to-1 mapping between GenLayer string identifier (e.g. `"DUEL_001"`) and EVM `bytes32`:
+- **EVM Solidity**: `bytes32 duelId = bytes32(abi.encodePacked("DUEL_001"))` (left-aligned, zero-padded to 32 bytes).
+- **Python Web3 Relay**: `duel_id.encode('utf-8').ljust(32, b'\0')[:32]`.
 
-## ❖ ARCHITECTURAL INVARIANTS & STEWARD COMPLIANCE
-1. **Multi-Layer Anti-Replay Uniqueness**:
-   - **Unique Summon ID**: Prevents duplicate summon attempts (`[ERR_REPLAY_01]`).
-   - **One-Hero-Per-Wallet Binding**: Enforces strict uniqueness so a wallet address cannot forge duplicate characters (`[ERR_REPLAY_02]`). Verified on-chain via live revert.
-2. **Anti-Self-Matching PvP Arena Guard**:
-   - In Arena duels, the contract asserts `challenger != defender`, blocking self-challenging exploits (`[ERR_SELF_DUEL]`). Both duelists must be verified summoned heroes.
-3. **Deterministic Attribute Mathematical Calibration**:
-   - Level, HP, Mana, Attack, Defense, and Critical Hit rates are calculated from actual verified on-chain metrics (transaction count, volume, liquidation scars), ensuring 100% fair gameplay balance.
-4. **Single-Round Unified AI Consensus**:
-   - Evaluates the 24/7 UTC Atomic Clock (`timeapi.io`) and wallet telemetry in 1 parallel prompt pass (0 leader rotations).
-5. **Production Signed Web3 EVM Escrow**:
-   - `relay/WalletQuestRelay.py` validates participant binding and duel escrow state on `WalletQuestHero.sol`, signing ECDSA transactions and confirming on-chain receipts (`status == 1`).
+### 2. Matching 2-Sided EVM Duel Creation & Collateral Funding
+- **Creation**: `createDuel(bytes32 duelId, address challenger, address defender, uint256 wagerAmount)` on `contracts/WalletQuestHero.sol`.
+- **Challenger Funding**: Challenger deposits exact native collateral (`fundDuel` with `msg.value == wagerAmount`).
+- **Defender Funding**: Defender deposits exact native collateral (`fundDuel` with `msg.value == wagerAmount`).
+- **Collateralization Guard**: `isFunded` is set to `true` strictly when both registered participants have funded their respective sides.
 
----
+### 3. Strict Pre-Settlement State Verification
+Before broadcasting any payout transaction, `relay/WalletQuestRelay.py` queries `duels(duelId)` and `getDuelEscrow(duelId)` on EVM and asserts:
+- `evm_duel.challenger == genlayer_duel.challenger`
+- `evm_duel.defender == genlayer_duel.defender`
+- `evm_duel.wagerAmount == genlayer_duel.wager_amount`
+- `evm_duel.isFunded == True` (both participants verified funded)
+- `evm_duel.isSettled == False` (idempotency guard)
+- `genlayer_duel.status == "DUEL_RESOLVED"`
+- `genlayer_duel.winner in (evm_duel.challenger, evm_duel.defender)`
 
-## ❖ HERO ARCHETYPES & STAT MATRIX
-- **`DEFI_ARCHMAGE`**: High lending/borrowing volume, complex smart contracts (High Mana & Arcane Attack).
-- **`DEX_BERSERKER`**: High-frequency swaps, liquidation scars (High Physical Attack & 28% Critical Rate).
-- **`NFT_SHADOW_ROGUE`**: Extensive collection minting & marketplace flips (High Agility & 32% Stealth Crit).
-- **`YIELD_CLERIC`**: Long holding periods, conservative staking pools (High Base HP & 400 Defense).
+### 4. Verified Transaction Receipts on Both Chains
+- Evaluates GenLayer single-round consensus output via `gen_callView`.
+- Broadcasts signed ECDSA transaction `disburseDuelBounty(duelId, winner)` to EVM.
+- Awaits `w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)` and asserts `receipt.status == 1`.
+
+### 5. Dynamic Confirmed On-Chain State in Frontend
+- Frontend calls `gen_callView("get_duel", [duelId])` upon resolution and displays the confirmed winner, payout amount ($2 \times \text{wager}$), and finalized combat log rather than a fixed success message.

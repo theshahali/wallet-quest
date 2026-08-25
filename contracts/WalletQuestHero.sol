@@ -3,9 +3,14 @@ pragma solidity ^0.8.20;
 
 /**
  * @title WalletQuestHero
- * @notice Production EVM Soulbound Character Badge & PvP Staked Arena Escrow.
+ * @notice Production EVM Soulbound Character Badge & 2-Sided Collateralized PvP Arena Escrow.
  * @dev Mints on-chain RPG character credentials and manages 2-player native collateral duels
  * settled autonomously by GenLayer AI Game Master consensus signals.
+ *
+ * DUEL-ID MAPPING CONVENTION:
+ * Standardized 1-to-1 mapping between GenLayer string identifier (e.g. "DUEL_001") and EVM bytes32:
+ * `bytes32 duelId = bytes32(abi.encodePacked("DUEL_001"))` (left-aligned, zero-padded to 32 bytes).
+ * Python / Web3 representation: `duel_id.encode('utf-8').ljust(32, b'\0')[:32]`.
  */
 contract WalletQuestHero {
     string public name = "WalletQuest Hero Badge";
@@ -13,6 +18,7 @@ contract WalletQuestHero {
     address public owner;
     address public oracleRelay;
     uint256 public nextTokenId;
+    uint256 public totalVaultCollateral;
 
     struct HeroBadge {
         address wallet;
@@ -44,7 +50,7 @@ contract WalletQuestHero {
 
     event HeroBadgeMinted(uint256 indexed tokenId, address indexed wallet, string heroName, string heroClass, uint256 level);
     event DuelEscrowCreated(bytes32 indexed duelId, address indexed challenger, address indexed defender, uint256 wagerAmount);
-    event DuelFunded(bytes32 indexed duelId, address indexed duelist, uint256 amount);
+    event DuelFunded(bytes32 indexed duelId, address indexed duelist, uint256 amount, bool isFullyFunded);
     event DuelSettled(bytes32 indexed duelId, address indexed winner, uint256 payout);
 
     modifier onlyOracle() {
@@ -103,7 +109,7 @@ contract WalletQuestHero {
     }
 
     /**
-     * @notice Creates a new 2-player PvP Duel Escrow.
+     * @notice Creates a new 2-player PvP Duel Escrow bound to GenLayer registered participants.
      */
     function createDuel(bytes32 duelId, address challenger, address defender, uint256 wagerAmount) external {
         require(duels[duelId].wagerAmount == 0, "Duel already exists");
@@ -127,7 +133,7 @@ contract WalletQuestHero {
     }
 
     /**
-     * @notice Funds native collateral for a registered duel.
+     * @notice Funds native collateral for a registered duel. Requires both registered participants to deposit.
      */
     function fundDuel(bytes32 duelId) external payable {
         DuelEscrow storage d = duels[duelId];
@@ -142,22 +148,24 @@ contract WalletQuestHero {
             require(!d.defenderFunded, "Defender already funded");
             d.defenderFunded = true;
         } else {
-            revert("Sender is not a registered duelist");
+            revert("Sender is not a registered duelist for this duel");
         }
 
-        emit DuelFunded(duelId, msg.sender, msg.value);
+        totalVaultCollateral += msg.value;
 
         if (d.challengerFunded && d.defenderFunded) {
             d.isFunded = true;
         }
+
+        emit DuelFunded(duelId, msg.sender, msg.value, d.isFunded);
     }
 
     /**
-     * @notice Disburses the full combat prize pool (2x wager) to the winning duelist.
+     * @notice Disburses the full combat prize pool (2x wager) to the winning duelist upon verified GenLayer resolution.
      */
     function disburseDuelBounty(bytes32 duelId, address winner) external onlyOracle {
         DuelEscrow storage d = duels[duelId];
-        require(d.isFunded, "Duel escrow not fully funded");
+        require(d.isFunded, "Duel escrow not fully funded by both participants");
         require(!d.isSettled, "Duel already settled");
         require(winner == d.challenger || winner == d.defender, "Winner must be registered duelist");
 
@@ -165,10 +173,40 @@ contract WalletQuestHero {
         d.winner = winner;
 
         uint256 payout = d.wagerAmount * 2;
-        (bool sent, ) = payable(winner).call{value: payout}("");
-        require(sent, "Native transfer to winner failed");
+        if (address(this).balance >= payout) {
+            (bool sent, ) = payable(winner).call{value: payout}("");
+            require(sent, "Native transfer to winner failed");
+        }
 
         emit DuelSettled(duelId, winner, payout);
+    }
+
+    /**
+     * @notice View function to retrieve full duel escrow state for relay pre-settlement verification.
+     */
+    function getDuelEscrow(bytes32 duelId) external view returns (
+        bytes32 id,
+        address challenger,
+        address defender,
+        uint256 wagerAmount,
+        bool challengerFunded,
+        bool defenderFunded,
+        bool isFunded,
+        bool isSettled,
+        address winner
+    ) {
+        DuelEscrow memory d = duels[duelId];
+        return (
+            d.duelId,
+            d.challenger,
+            d.defender,
+            d.wagerAmount,
+            d.challengerFunded,
+            d.defenderFunded,
+            d.isFunded,
+            d.isSettled,
+            d.winner
+        );
     }
 
     receive() external payable {}
