@@ -7,7 +7,7 @@
 ## 🔗 Verified Deployments & Links
 - **GenLayer Explorer Contract**: [`0x037A962c2be3781Fb31a5faF3fb22D6CBb555049`](https://explorer-studio.genlayer.com/address/0x037A962c2be3781Fb31a5faF3fb22D6CBb555049)
 - **GitHub Repository**: [`https://github.com/theshahali/wallet-quest`](https://github.com/theshahali/wallet-quest)
-- **Live DApp Dashboard**: [`https://wallet-quest.vercel.app/`](https://wallet-quest.vercel.app/)
+- **Live DApp Dashboard**: [`https://wallet-quest-delta.vercel.app/`](https://wallet-quest-delta.vercel.app/)
 - **Target Evidence Snapshot**: [`https://theshahali.github.io/wallet-quest/demo/mock_wallet_degen.html`](https://theshahali.github.io/wallet-quest/demo/mock_wallet_degen.html)
 
 ---
