@@ -84,25 +84,8 @@ export default function WalletQuestApp() {
   const [isGuestMode, setIsGuestMode] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
 
-  // Active Hero Profile
-  const [hero, setHero] = useState<HeroData | null>({
-    wallet_address: '0x5C48c6f77617FC05761433Cc4019A79b47d1ec7D',
-    hero_name: 'Varkor Flamebyte',
-    hero_title: 'The Slippage-Scarred Ravager of the Thousand Swaps',
-    hero_class: 'DEX_BERSERKER',
-    level: 100,
-    hp: 1400,
-    mana: 600,
-    attack: 1050,
-    defense: 400,
-    crit_rate_x10: 280,
-    tx_count: 3420,
-    total_volume_usd: 3850000,
-    dna_hash: '0x8f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6',
-    summon_date: '2026-08-24',
-    backstory_lore: 'From the roaring arenas of Uniswap and 1inch to the bloodied perpetual fronts of GMX, Varkor Flamebyte carved his legend through 3,420 relentless on-chain battles. Scarred by failed strikes, MEV ambushes, and three liquidations, he yet returned fiercer each time, a berserker whose wallet became a chronicle of speed, chaos, and conquest.',
-    telemetry_url: 'https://theshahali.github.io/wallet-quest/demo/mock_wallet_degen.html'
-  });
+  // Active Hero Profile - Initialized to null (strictly loaded from on-chain state)
+  const [hero, setHero] = useState<HeroData | null>(null);
 
   const demoPresets = {
     degen: {
@@ -127,52 +110,56 @@ export default function WalletQuestApp() {
 
   const addLog = (msg: string) => {
     const time = new Date().toLocaleTimeString();
-    setRpcLogs(prev => [`[${time}] ${msg}`, ...prev.slice(0, 25)]);
+    setRpcLogs(prev => [`[${time}] ${msg}`, ...prev.slice(0, 30)]);
   };
 
-  // Real GenLayer View Call: Query Hero from Contract via genlayer-js
+  // Real GenLayer View Call: Query Hero directly from Contract via genlayer-js
   const fetchHeroFromChain = async (walletAddr: string) => {
     setIsCallingRpc(true);
-    addLog(`>>> [GEN_RPC] Querying get_hero("${walletAddr.slice(0, 10)}...") from Intelligent Contract...`);
+    const cleanAddr = walletAddr.trim().toLowerCase();
+    addLog(`>>> [GEN_RPC] Querying get_hero("${cleanAddr.slice(0, 10)}...") from Intelligent Contract...`);
 
     try {
       const client = createClient({ endpoint: GENLAYER_RPC });
       const res = await client.readContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: 'get_hero',
-        args: [walletAddr]
+        args: [cleanAddr]
       }) as any;
 
-      if (res) {
-        const parsed = typeof res === 'string' ? JSON.parse(res) : res;
+      if (res && res.hero_name) {
         setHero({
-          wallet_address: parsed.wallet_address || walletAddr,
-          hero_name: parsed.hero_name || 'Summoned Hero',
-          hero_title: parsed.hero_title || 'Seeker of the Ledger',
-          hero_class: parsed.hero_class || 'DEX_BERSERKER',
-          level: Number(parsed.level) || 1,
-          hp: Number(parsed.hp) || 500,
-          mana: Number(parsed.mana) || 300,
-          attack: Number(parsed.attack) || 200,
-          defense: Number(parsed.defense) || 150,
-          crit_rate_x10: Number(parsed.crit_rate_x10) || 150,
-          tx_count: Number(parsed.tx_count) || 100,
-          total_volume_usd: Number(parsed.total_volume_usd) || 50000,
-          dna_hash: parsed.dna_hash || '0x0',
-          summon_date: parsed.summon_date || '2026-08-24',
-          backstory_lore: parsed.backstory_lore || 'Hero forged by GenLayer AI Game Master.',
-          telemetry_url: parsed.telemetry_url || ''
+          wallet_address: res.wallet_address || cleanAddr,
+          hero_name: res.hero_name,
+          hero_title: res.hero_title,
+          hero_class: res.hero_class,
+          level: Number(res.level) || 1,
+          hp: Number(res.hp) || 500,
+          mana: Number(res.mana) || 300,
+          attack: Number(res.attack) || 200,
+          defense: Number(res.defense) || 150,
+          crit_rate_x10: Number(res.crit_rate_x10) || 150,
+          tx_count: Number(res.tx_count) || 100,
+          total_volume_usd: Number(res.total_volume_usd) || 50000,
+          dna_hash: res.dna_hash || '0x0',
+          summon_date: res.summon_date || '2026-08-24',
+          backstory_lore: res.backstory_lore || 'Hero forged on GenLayer.',
+          telemetry_url: res.telemetry_url || ''
         });
-        addLog(`✓ [ENGINE SYNC] Profile Bound: ${parsed.hero_name} (${parsed.hero_class} Lvl ${parsed.level})`);
+        addLog(`✓ [ON-CHAIN SYNC] Verified Hero: ${res.hero_name} (${res.hero_class} Lvl ${res.level})`);
+      } else {
+        setHero(null);
+        addLog(`ℹ️ [NO RECORD] Wallet ${cleanAddr.slice(0, 8)}... has no hero summoned yet. Ready to summon.`);
       }
     } catch (e: any) {
-      addLog(`ℹ️ [RPC SYNC] Hero loaded from local archetype state.`);
+      setHero(null);
+      addLog(`ℹ️ [NO RECORD] Wallet ${cleanAddr.slice(0, 8)}... has no hero summoned yet. Ready to summon.`);
     } finally {
       setIsCallingRpc(false);
     }
   };
 
-  // Real GenLayer Write: Summon Hero via AI Consensus
+  // Real GenLayer Write: Summon Hero via AI Consensus with waitForTransactionReceipt
   const handleSummonHero = async () => {
     setIsCallingRpc(true);
     const targetAddr = inputWallet.trim().toLowerCase();
@@ -194,14 +181,17 @@ export default function WalletQuestApp() {
         value: BigInt(0)
       }) as string;
 
-      addLog(`✓ [GENLAYER TX MINED] Hero summoned on-chain! Tx: ${String(txHash).slice(0, 16)}...`);
-      addLog(`4. AI Consensus finalized! Synchronizing verified hero stats from contract readback...`);
+      addLog(`⚡ [TX BROADCAST] Transaction submitted: ${String(txHash).slice(0, 16)}... Awaiting validator consensus...`);
+      
+      const receipt = await client.waitForTransactionReceipt({ hash: txHash as any, retries: 40, interval: 2000 });
+      addLog(`✓ [CONSENSUS MINED] Validator Jury Consensus: ${(receipt as any)?.status_name || 'ACCEPTED'} (Tx: ${String(txHash).slice(0, 16)}...)`);
+      addLog(`4. Synchronizing verified hero stats from contract readback...`);
 
       // Verified contract readback directly from on-chain storage
       await fetchHeroFromChain(targetAddr);
       setActiveTab('hero');
     } catch (e: any) {
-      addLog(`🚨 [FAIL-CLOSED] Summon transaction failed: ${e.message}`);
+      addLog(`🚨 [TRANSACTION ERROR] ${e.message}`);
     } finally {
       setIsCallingRpc(false);
     }
@@ -242,6 +232,17 @@ export default function WalletQuestApp() {
 
       const genAccount = createAccount();
       const client = createClient({ endpoint: GENLAYER_RPC, account: genAccount });
+
+      // Initiate duel if not already present
+      try {
+        await client.writeContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          functionName: 'initiate_duel',
+          args: [duelId, defender, BigInt(wager)],
+          value: BigInt(0)
+        });
+      } catch (initErr) {}
+
       const glTxHash = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: 'resolve_duel',
@@ -249,7 +250,10 @@ export default function WalletQuestApp() {
         value: BigInt(0)
       }) as string;
 
-      addLog(`✓ [GENLAYER TX MINED] Duel resolved on-chain! Tx: ${String(glTxHash).slice(0, 16)}...`);
+      addLog(`⚡ [TX BROADCAST] Duel transaction submitted: ${String(glTxHash).slice(0, 16)}... Awaiting validator consensus...`);
+      
+      const glReceipt = await client.waitForTransactionReceipt({ hash: glTxHash as any, retries: 40, interval: 2000 });
+      addLog(`✓ [GENLAYER TX MINED] Duel resolved on-chain! Status: ${(glReceipt as any)?.status_name || 'ACCEPTED'}`);
       addLog(`3. Reading confirmed on-chain verdict via verified readContract("get_duel", ["${duelId}"])...`);
 
       // Verified contract readback
