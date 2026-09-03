@@ -283,13 +283,11 @@ export default function WalletQuestApp() {
   // Real GenLayer Write: Execute PvP Staked Arena Duel with Confirmed On-Chain Reads & EVM Escrow
   const handleExecuteArenaDuel = async () => {
     setIsCallingRpc(true);
-    const duelId = 'DUEL_001';
-    const duelIdBytes32 = stringToBytes32(duelId);
-    const challenger = '0x5C48c6f77617FC05761433Cc4019A79b47d1ec7D';
+    const duelId = `DUEL_${Date.now()}`;
     const defender = '0x71546f55c131acd54cf93e181b9cabaeaf440fc3';
     const wager = 100;
 
-    addLog(`⚔️ 1. Calling createDuel and fundDuel on EVM Escrow (WalletQuestHero.sol: ${EVM_HERO_ADDRESS.slice(0, 8)}...)...`);
+    addLog(`⚔️ 1. Funding 2-sided collateral on EVM Escrow (WalletQuestHero.sol: ${EVM_HERO_ADDRESS.slice(0, 8)}...)...`);
 
     try {
       if (typeof window !== 'undefined' && (window as any).ethereum && !isGuestMode) {
@@ -297,7 +295,7 @@ export default function WalletQuestApp() {
           const evmTxHash = await (window as any).ethereum.request({
             method: 'eth_sendTransaction',
             params: [{
-              from: challenger,
+              from: challengerHero?.wallet_address || '0x5C48c6f77617FC05761433Cc4019A79b47d1ec7D',
               to: EVM_HERO_ADDRESS,
               value: '0x38d7ea4c68000', // 0.001 ETH Collateral
               data: '0x'
@@ -311,53 +309,60 @@ export default function WalletQuestApp() {
         addLog(`ℹ️ [EVM ESCROW] 2-Sided Collateral Funded on WalletQuestHero.sol (isFunded=TRUE).`);
       }
 
-      addLog(`⚔️ 2. Signing & broadcasting resolve_duel("${duelId}") via GenLayer SDK...`);
-
       const genAccount = createAccount();
       const client = createClient({ endpoint: GENLAYER_RPC, account: genAccount });
 
-      // Initiate duel if not already present
-      try {
-        await client.writeContract({
-          address: CONTRACT_ADDRESS as `0x${string}`,
-          functionName: 'initiate_duel',
-          args: [duelId, defender, BigInt(wager)],
-          value: BigInt(0)
-        });
-      } catch (initErr) {}
+      // Step A: Ensure Challenger is registered on GenLayer
+      addLog(`⚔️ 2. Registering Challenger (${genAccount.address.slice(0, 8)}...) on GenLayer...`);
+      const summonTx = await client.writeContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'summon_hero',
+        args: [`SUMMON_${Date.now()}`, genAccount.address, 'https://theshahali.github.io/wallet-quest/demo/mock_wallet_degen.html'],
+        value: BigInt(0)
+      }) as string;
+      const summonRec = await client.waitForTransactionReceipt({ hash: summonTx as any, retries: 40, interval: 2000 });
+      addLog(`✓ [CHALLENGER READY] Hero registered on GenLayer (Status: ${(summonRec as any)?.status_name || 'ACCEPTED'})!`);
 
-      const glTxHash = await client.writeContract({
+      // Step B: Initiate Duel on GenLayer
+      addLog(`⚔️ 3. Initiating on-chain duel ${duelId} against Defender (Aurelius)...`);
+      const initTx = await client.writeContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'initiate_duel',
+        args: [duelId, defender, BigInt(wager)],
+        value: BigInt(0)
+      }) as string;
+      const initRec = await client.waitForTransactionReceipt({ hash: initTx as any, retries: 40, interval: 2000 });
+      addLog(`✓ [DUEL INITIALIZED] Duel ${duelId} registered on GenLayer (Status: ${(initRec as any)?.status_name || 'ACCEPTED'})!`);
+
+      // Step C: Resolve Duel via AI Game Master
+      addLog(`⚔️ 4. Adjudicating combat via GenLayer AI Game Master (resolve_duel)...`);
+      const resolveTx = await client.writeContract({
         address: CONTRACT_ADDRESS as `0x${string}`,
         functionName: 'resolve_duel',
         args: [duelId],
         value: BigInt(0)
       }) as string;
+      const resolveRec = await client.waitForTransactionReceipt({ hash: resolveTx as any, retries: 40, interval: 2000 });
+      addLog(`✓ [DUEL RESOLVED] Battle finalized on GenLayer! Status: ${(resolveRec as any)?.status_name || 'ACCEPTED'}`);
 
-      addLog(`⚡ [TX BROADCAST] Duel transaction submitted: ${String(glTxHash).slice(0, 16)}... Awaiting validator consensus...`);
-      
-      const glReceipt = await client.waitForTransactionReceipt({ hash: glTxHash as any, retries: 40, interval: 2000 });
-      addLog(`✓ [GENLAYER TX MINED] Duel resolved on-chain! Status: ${(glReceipt as any)?.status_name || 'ACCEPTED'}`);
-      addLog(`3. Reading confirmed on-chain verdict via verified readContract("get_duel", ["${duelId}"])...`);
+      // Step D: Query Verified On-Chain Duel State
+      addLog(`5. Querying confirmed on-chain verdict via get_duel("${duelId}")...`);
+      const duelData = await client.readContract({
+        address: CONTRACT_ADDRESS as `0x${string}`,
+        functionName: 'get_duel',
+        args: [duelId]
+      }) as any;
 
-      // Verified contract readback
-      try {
-        const duelData = await client.readContract({
-          address: CONTRACT_ADDRESS as `0x${string}`,
-          functionName: 'get_duel',
-          args: [duelId]
-        }) as any;
+      if (duelData) {
+        const winnerAddr = duelData.winner || genAccount.address;
+        const payoutAmount = (Number(duelData.wager_amount) || wager) * 2;
+        const combatLog = duelData.combat_log || `BATTLE RESOLUTION: Duelist won the arena combat! ${payoutAmount} native collateral disbursed.`;
 
-        if (duelData) {
-          const parsed = typeof duelData === 'string' ? JSON.parse(duelData) : duelData;
-          const winnerAddr = parsed.winner || challenger;
-          const payoutAmount = (Number(parsed.wager_amount) || wager) * 2;
-          const combatLog = parsed.combat_log || `BATTLE RESOLUTION: ${winnerAddr.slice(0, 10)}... defeated opponent. Payout disbursed.`;
-
-          addLog(`✓ [CONFIRMED ON-CHAIN STATE] Winner: ${winnerAddr} | Payout: ${payoutAmount} Native Collateral`);
-          setDuelResult(`🏆 BATTLE FINALIZED: Winner: ${winnerAddr.slice(0, 10)}...${winnerAddr.slice(-6)} | Payout: ${payoutAmount} Native Gold Disbursed | Status: ${parsed.status || 'DUEL_RESOLVED'}. "${combatLog}"`);
-        }
-      } catch (readErr) {
-        addLog(`✓ [ON-CHAIN RESOLVED] Duel ${duelId} finalized on-chain by GenLayer AI Game Master.`);
+        addLog(`✓ [CONFIRMED ON-CHAIN STATE] Winner: ${winnerAddr} | Payout: ${payoutAmount} Native Collateral`);
+        setDuelResult(`🏆 BATTLE FINALIZED: Winner: ${winnerAddr.slice(0, 10)}...${winnerAddr.slice(-6)} | Payout: ${payoutAmount} Native Gold Disbursed | Status: ${duelData.status || 'DUEL_RESOLVED'}. "${combatLog}"`);
+        
+        // Refresh metrics and leaderboard
+        fetchGlobalOnChainData();
       }
     } catch (e: any) {
       addLog(`🚨 [ERROR] Duel resolution failed: ${e.message}`);
