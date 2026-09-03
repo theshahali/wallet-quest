@@ -169,14 +169,14 @@ contract WalletQuestHero {
         require(!d.isSettled, "Duel already settled");
         require(winner == d.challenger || winner == d.defender, "Winner must be registered duelist");
 
+        uint256 payout = d.wagerAmount * 2;
+        require(address(this).balance >= payout, "[ERR_UNDERFUNDED] Vault balance insufficient for duel payout");
+
         d.isSettled = true;
         d.winner = winner;
 
-        uint256 payout = d.wagerAmount * 2;
-        if (address(this).balance >= payout) {
-            (bool sent, ) = payable(winner).call{value: payout}("");
-            require(sent, "Native transfer to winner failed");
-        }
+        (bool sent, ) = payable(winner).call{value: payout}("");
+        require(sent, "Native transfer to winner failed");
 
         emit DuelSettled(duelId, winner, payout);
     }

@@ -230,9 +230,14 @@ class EvmSettlementRelay:
         assert evm_settled == False, f"EVM duel {duel_id} is already settled"
         assert gl_winner in (evm_challenger, evm_defender), f"Winner {gl_winner} is not a registered duelist"
 
-        logging.info(f"🛡️ [PRE-SETTLEMENT VERIFIED] Duel {duel_id} verified against EVM Escrow: Both funded, wager {evm_wager}, winner {gl_winner}")
+        # 3. Assert EVM Vault Balance Sufficiency (Underfunded revert guard)
+        vault_balance = self.w3.eth.get_balance(self.contract_address)
+        evm_payout = evm_wager * 2
+        assert vault_balance >= evm_payout, f"[ERR_UNDERFUNDED] Vault balance ({vault_balance}) < required payout ({evm_payout})"
 
-        # 3. Sign & Broadcast EVM Disbursement Transaction
+        logging.info(f"🛡️ [PRE-SETTLEMENT VERIFIED] Duel {duel_id} verified against EVM Escrow: Both funded, wager {evm_wager}, payout {evm_payout}, winner {gl_winner}")
+
+        # 4. Sign & Broadcast EVM Disbursement Transaction
         try:
             contract = self.w3.eth.contract(address=Web3.to_checksum_address(self.contract_address), abi=HERO_ABI)
             d_bytes32 = self.to_bytes32(duel_id)
