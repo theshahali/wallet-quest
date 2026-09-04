@@ -135,8 +135,8 @@ export default function WalletQuestApp() {
 
   // Active Hero Profile - Initialized to null (strictly loaded from on-chain state)
   const [hero, setHero] = useState<HeroData | null>(null);
-  const [totalOnChainHeroes, setTotalOnChainHeroes] = useState<number>(2);
-  const [totalOnChainDuels, setTotalOnChainDuels] = useState<number>(1);
+  const [totalOnChainHeroes, setTotalOnChainHeroes] = useState<number>(0);
+  const [totalOnChainDuels, setTotalOnChainDuels] = useState<number>(0);
   const [leaderboardHeroes, setLeaderboardHeroes] = useState<HeroData[]>([]);
   const [challengerHero, setChallengerHero] = useState<HeroData | null>(null);
   const [defenderHero, setDefenderHero] = useState<HeroData | null>(null);
@@ -179,14 +179,14 @@ export default function WalletQuestApp() {
           functionName: 'get_total_heroes',
           args: []
         });
-        setTotalOnChainHeroes(Number(totH) || 2);
+        setTotalOnChainHeroes(Number(totH) || 0);
 
         const totD = await client.readContract({
           address: CONTRACT_ADDRESS as any,
           functionName: 'get_total_duels',
           args: []
         });
-        setTotalOnChainDuels(Number(totD) || 1);
+        setTotalOnChainDuels(Number(totD) || 0);
       } catch (err) {}
 
       // 2. Fetch On-Chain Heroes for Leaderboard & Arena
@@ -463,16 +463,18 @@ export default function WalletQuestApp() {
         args: [duelId]
       }) as any;
 
-      if (duelData) {
-        const winnerAddr = duelData.winner || genAccount.address;
+      if (duelData && duelData.winner) {
+        const winnerAddr = duelData.winner;
         const payoutAmount = (Number(duelData.wager_amount) || wager) * 2;
-        const combatLog = duelData.combat_log || `BATTLE RESOLUTION: Duelist won the arena combat! ${payoutAmount} native collateral disbursed.`;
+        const combatLog = duelData.combat_log || '';
 
         addLog(`✓ [CONFIRMED ON-CHAIN STATE] Winner: ${winnerAddr} | Payout: ${payoutAmount} Native Collateral`);
-        setDuelResult(`🏆 BATTLE FINALIZED: Winner: ${winnerAddr.slice(0, 10)}...${winnerAddr.slice(-6)} | Payout: ${payoutAmount} Native Gold Disbursed | Status: ${duelData.status || 'DUEL_RESOLVED'}. "${combatLog}"`);
+        setDuelResult(`🏆 BATTLE FINALIZED: Winner: ${winnerAddr.slice(0, 10)}...${winnerAddr.slice(-6)} | Payout: ${payoutAmount} Native Gold Disbursed | Status: ${duelData.status}. "${combatLog}"`);
         
         // Refresh metrics and leaderboard
         fetchGlobalOnChainData();
+      } else {
+        throw new Error('On-chain duel record has not confirmed a verified winner.');
       }
     } catch (e: any) {
       addLog(`🚨 [ERROR] Duel resolution failed: ${e.message}`);
