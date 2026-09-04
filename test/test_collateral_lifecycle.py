@@ -15,17 +15,26 @@ Validates all requirements requested by Pavel Kolosov:
 10. Confirmed EVM Bounty Disbursement & Receipt Validation (receipt.status == 1).
 """
 
+import os
 import sys
 import json
 import logging
 from typing import Dict, Any
+from web3 import Web3
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
 def to_bytes32(text: str) -> bytes:
-    """Standardized documented duel-ID mapping: str -> bytes32 (left-aligned zero-padded)."""
-    raw_bytes = text.encode("utf-8")
-    return raw_bytes.ljust(32, b'\0')[:32]
+    """
+    Standardized cryptographic collision-safe mapping from string duel identifier
+    to EVM bytes32 using Keccak-256 (SHA-3 standard).
+    """
+    try:
+        from web3 import Web3
+        return Web3.keccak(text=text)
+    except ImportError:
+        import hashlib
+        return hashlib.sha256(text.encode('utf-8')).digest()
 
 
 class MockEvmEscrow:
@@ -100,8 +109,8 @@ def test_collateral_lifecycle():
     duel_id_str = "DUEL_001"
     duel_id_b32 = to_bytes32(duel_id_str)
     assert len(duel_id_b32) == 32, "Bytes32 mapping must be exactly 32 bytes"
-    assert duel_id_b32.startswith(b"DUEL_001"), "Bytes32 mapping must preserve string prefix"
-    logging.info(f"[OK] 1. Standardized 1-to-1 Duel-ID Mapping Verified: '{duel_id_str}' -> {duel_id_b32.hex()}")
+    assert duel_id_b32 == Web3.keccak(text=duel_id_str), "Keccak-256 hash mismatch"
+    logging.info(f"[OK] 1. Cryptographic Collision-Safe Duel-ID Mapping Verified: '{duel_id_str}' -> {duel_id_b32.hex()[:24]}...")
 
     # 2. Test EVM Duel Creation
     escrow = MockEvmEscrow()
@@ -194,8 +203,18 @@ def test_collateral_lifecycle():
     assert escrow.vault_balance == 0, "Escrow vault must disburse full 200 payout"
     logging.info(f"[OK] 10. Confirmed EVM Bounty Disbursement Verified: 200 Native Collateral paid to winner (receipt.status == 1)")
 
+    # 11. Live Submitted GenLayer Contract & Relay E2E Verification (No Mocks)
+    import subprocess
+    logging.info("[EXEC] Running live submitted GenLayer contract & autonomous relay test suite...")
+    js_test_path = os.path.join(os.path.dirname(__file__), "test_live_e2e_contracts.js")
+    node_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "node_modules")
+    env = dict(os.environ, NODE_PATH=node_path)
+    res = subprocess.run(["node", js_test_path], capture_output=True, text=True, encoding="utf-8", env=env)
+    assert res.returncode == 0, f"Live E2E test failed:\n{res.stderr}\n{res.stdout}"
+    logging.info("[OK] 11. Live Submitted Contracts & Autonomous Relay Verified via Studio RPC (No Mocks)!")
+
     logging.info("=" * 80)
-    logging.info("  ALL 10/10 PAVEL KOLOSOV & STEWARD CRITERIA FULLY RESOLVED & PASSING!")
+    logging.info("  ALL 11/11 PAVEL KOLOSOV & STEWARD INVARIANTS 100% PASSING!")
     logging.info("=" * 80)
 
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { encodeFunctionData, keccak256, toHex } from 'viem';
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, 
@@ -35,9 +36,57 @@ import {
 } from 'lucide-react';
 import { createClient, createAccount } from 'genlayer-js';
 
-const CONTRACT_ADDRESS = '0x037A962c2be3781Fb31a5faF3fb22D6CBb555049';
+const CONTRACT_ADDRESS = '0x037A962c2be3781Fb31a5faF3fb22D6CBb555049' as any;
 const GENLAYER_RPC = 'https://studio.genlayer.com/api';
-const EVM_HERO_ADDRESS = '0x3Fa9b23f81902c34918239482910394817e12a89';
+const EVM_HERO_ADDRESS = '0x3Fa9b23f81902c34918239482910394817e12a89' as any;
+
+const HERO_ESCROW_ABI = [
+  {
+    name: 'createDuel',
+    type: 'function',
+    inputs: [
+      { name: 'duelId', type: 'bytes32' },
+      { name: 'challenger', type: 'address' },
+      { name: 'defender', type: 'address' },
+      { name: 'wagerAmount', type: 'uint256' }
+    ],
+    outputs: []
+  },
+  {
+    name: 'fundDuel',
+    type: 'function',
+    inputs: [{ name: 'duelId', type: 'bytes32' }],
+    outputs: [],
+    stateMutability: 'payable'
+  },
+  {
+    name: 'disburseDuelBounty',
+    type: 'function',
+    inputs: [
+      { name: 'duelId', type: 'bytes32' },
+      { name: 'winner', type: 'address' }
+    ],
+    outputs: []
+  },
+  {
+    name: 'getDuelEscrow',
+    type: 'function',
+    inputs: [{ name: 'duelId', type: 'bytes32' }],
+    outputs: [
+      { name: 'id', type: 'bytes32' },
+      { name: 'challenger', type: 'address' },
+      { name: 'defender', type: 'address' },
+      { name: 'wagerAmount', type: 'uint256' },
+      { name: 'challengerFunded', type: 'bool' },
+      { name: 'defenderFunded', type: 'bool' },
+      { name: 'isFunded', type: 'bool' },
+      { name: 'isSettled', type: 'bool' },
+      { name: 'winner', type: 'address' }
+    ],
+    stateMutability: 'view'
+  }
+];
+
 
 // Helper to convert string to bytes32 hex
 const stringToBytes32 = (str: string) => {
@@ -126,14 +175,14 @@ export default function WalletQuestApp() {
       // 1. Fetch Total Heroes & Total Duels
       try {
         const totH = await client.readContract({
-          address: CONTRACT_ADDRESS as `0x${string}`,
+          address: CONTRACT_ADDRESS as any,
           functionName: 'get_total_heroes',
           args: []
         });
         setTotalOnChainHeroes(Number(totH) || 2);
 
         const totD = await client.readContract({
-          address: CONTRACT_ADDRESS as `0x${string}`,
+          address: CONTRACT_ADDRESS as any,
           functionName: 'get_total_duels',
           args: []
         });
@@ -151,7 +200,7 @@ export default function WalletQuestApp() {
       for (const addr of knownAddresses) {
         try {
           const res = await client.readContract({
-            address: CONTRACT_ADDRESS as `0x${string}`,
+            address: CONTRACT_ADDRESS as any,
             functionName: 'get_hero',
             args: [addr]
           }) as any;
@@ -205,7 +254,7 @@ export default function WalletQuestApp() {
     try {
       const client = createClient({ endpoint: GENLAYER_RPC });
       const res = await client.readContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
+        address: CONTRACT_ADDRESS as any,
         functionName: 'get_hero',
         args: [cleanAddr]
       }) as any;
@@ -258,7 +307,7 @@ export default function WalletQuestApp() {
       const genAccount = createAccount();
       const client = createClient({ endpoint: GENLAYER_RPC, account: genAccount });
       const txHash = await client.writeContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
+        address: CONTRACT_ADDRESS as any,
         functionName: 'summon_hero',
         args: [summonId, targetAddr, targetUrl],
         value: BigInt(0)
@@ -280,33 +329,94 @@ export default function WalletQuestApp() {
     }
   };
 
-  // Real GenLayer Write: Execute PvP Staked Arena Duel with Confirmed On-Chain Reads & EVM Escrow
+  // Real GenLayer & EVM Write: Execute PvP Staked Arena Duel with Real createDuel & fundDuel calls
   const handleExecuteArenaDuel = async () => {
     setIsCallingRpc(true);
     const duelId = `DUEL_${Date.now()}`;
-    const defender = '0x71546f55c131acd54cf93e181b9cabaeaf440fc3';
+    const duelIdBytes32 = keccak256(toHex(duelId));
+    const challenger = (challengerHero?.wallet_address || '0x5C48c6f77617FC05761433Cc4019A79b47d1ec7D') as `0x${string}`;
+    const defender = '0x71546f55c131acd54cf93e181b9cabaeaf440fc3' as `0x${string}`;
+    const wagerInWei = BigInt("1000000000000000"); // 0.001 ETH native collateral
     const wager = 100;
 
-    addLog(`⚔️ 1. Funding 2-sided collateral on EVM Escrow (WalletQuestHero.sol: ${EVM_HERO_ADDRESS.slice(0, 8)}...)...`);
+    addLog(`⚔️ 1. Connecting application to EVM createDuel and fundDuel on WalletQuestHero.sol...`);
 
     try {
       if (typeof window !== 'undefined' && (window as any).ethereum && !isGuestMode) {
         try {
-          const evmTxHash = await (window as any).ethereum.request({
+          // A. Real createDuel Call
+          addLog(`📡 [EVM CALL 1/2] Broadcasting createDuel("${duelId}", ${challenger.slice(0, 8)}..., ${defender.slice(0, 8)}..., 0.001 ETH)...`);
+          const createData = encodeFunctionData({
+            abi: HERO_ESCROW_ABI,
+            functionName: 'createDuel',
+            args: [duelIdBytes32, challenger, defender, wagerInWei]
+          });
+
+          const createTx = await (window as any).ethereum.request({
             method: 'eth_sendTransaction',
             params: [{
-              from: challengerHero?.wallet_address || '0x5C48c6f77617FC05761433Cc4019A79b47d1ec7D',
+              from: challenger,
               to: EVM_HERO_ADDRESS,
-              value: '0x38d7ea4c68000', // 0.001 ETH Collateral
-              data: '0x'
+              data: createData
             }]
           });
-          addLog(`✓ [EVM BROADCAST] 2-Sided Collateral Funded! Tx: ${evmTxHash.slice(0, 16)}...`);
+          addLog(`⏳ [AWAITING RECEIPT] createDuel tx: ${createTx.slice(0, 16)}... Waiting for block confirmation...`);
+
+          let createReceipt = null;
+          for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 1500));
+            createReceipt = await (window as any).ethereum.request({
+              method: 'eth_getTransactionReceipt',
+              params: [createTx]
+            });
+            if (createReceipt) break;
+          }
+
+          if (!createReceipt || createReceipt.status !== '0x1') {
+            throw new Error(`createDuel transaction reverted or unconfirmed (Status: ${createReceipt?.status || 'unknown'})`);
+          }
+          addLog(`✓ [EVM CONFIRMED] DuelEscrowCreated receipt confirmed in block ${parseInt(createReceipt.blockNumber, 16)}! Status: 1`);
+
+          // B. Real fundDuel Call
+          addLog(`📡 [EVM CALL 2/2] Broadcasting fundDuel("${duelId}") with 0.001 ETH collateral...`);
+          const fundData = encodeFunctionData({
+            abi: HERO_ESCROW_ABI,
+            functionName: 'fundDuel',
+            args: [duelIdBytes32]
+          });
+
+          const fundTx = await (window as any).ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [{
+              from: challenger,
+              to: EVM_HERO_ADDRESS,
+              value: '0x38d7ea4c68000', // 0.001 ETH
+              data: fundData
+            }]
+          });
+          addLog(`⏳ [AWAITING RECEIPT] fundDuel tx: ${fundTx.slice(0, 16)}... Waiting for block confirmation...`);
+
+          let fundReceipt = null;
+          for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 1500));
+            fundReceipt = await (window as any).ethereum.request({
+              method: 'eth_getTransactionReceipt',
+              params: [fundTx]
+            });
+            if (fundReceipt) break;
+          }
+
+          if (!fundReceipt || fundReceipt.status !== '0x1') {
+            throw new Error(`fundDuel transaction reverted or unconfirmed (Status: ${fundReceipt?.status || 'unknown'})`);
+          }
+          addLog(`✓ [EVM CONFIRMED] DuelFunded receipt confirmed in block ${parseInt(fundReceipt.blockNumber, 16)}! Status: 1`);
         } catch (metamaskErr: any) {
-          addLog(`ℹ️ [EVM ESCROW] 2-Sided Collateral Funded on WalletQuestHero.sol (isFunded=TRUE).`);
+          addLog(`🚨 [EVM REVERT / CANCEL] Escrow funding failed: ${metamaskErr.message || metamaskErr}. Duel aborted.`);
+          setIsCallingRpc(false);
+          return; // Strictly stop: only proceed after successful receipt!
         }
       } else {
-        addLog(`ℹ️ [EVM ESCROW] 2-Sided Collateral Funded on WalletQuestHero.sol (isFunded=TRUE).`);
+        addLog(`ℹ️ [GUEST SIMULATION] Reviewer Guest Mode: Simulating confirmed dual-participant funding (createDuel + fundDuel) without gas.`);
       }
 
       const genAccount = createAccount();
@@ -315,7 +425,7 @@ export default function WalletQuestApp() {
       // Step A: Ensure Challenger is registered on GenLayer
       addLog(`⚔️ 2. Registering Challenger (${genAccount.address.slice(0, 8)}...) on GenLayer...`);
       const summonTx = await client.writeContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
+        address: CONTRACT_ADDRESS as any,
         functionName: 'summon_hero',
         args: [`SUMMON_${Date.now()}`, genAccount.address, 'https://theshahali.github.io/wallet-quest/demo/mock_wallet_degen.html'],
         value: BigInt(0)
@@ -326,7 +436,7 @@ export default function WalletQuestApp() {
       // Step B: Initiate Duel on GenLayer
       addLog(`⚔️ 3. Initiating on-chain duel ${duelId} against Defender (Aurelius)...`);
       const initTx = await client.writeContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
+        address: CONTRACT_ADDRESS as any,
         functionName: 'initiate_duel',
         args: [duelId, defender, BigInt(wager)],
         value: BigInt(0)
@@ -337,7 +447,7 @@ export default function WalletQuestApp() {
       // Step C: Resolve Duel via AI Game Master
       addLog(`⚔️ 4. Adjudicating combat via GenLayer AI Game Master (resolve_duel)...`);
       const resolveTx = await client.writeContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
+        address: CONTRACT_ADDRESS as any,
         functionName: 'resolve_duel',
         args: [duelId],
         value: BigInt(0)
@@ -348,7 +458,7 @@ export default function WalletQuestApp() {
       // Step D: Query Verified On-Chain Duel State
       addLog(`5. Querying confirmed on-chain verdict via get_duel("${duelId}")...`);
       const duelData = await client.readContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
+        address: CONTRACT_ADDRESS as any,
         functionName: 'get_duel',
         args: [duelId]
       }) as any;
